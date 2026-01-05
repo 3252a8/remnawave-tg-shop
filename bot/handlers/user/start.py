@@ -16,6 +16,7 @@ from bot.keyboards.inline.user_keyboards import (
     get_main_menu_inline_keyboard,
     get_language_selection_keyboard,
     get_channel_subscription_keyboard,
+    get_information_links_keyboard,
 )
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
@@ -696,6 +697,38 @@ async def main_action_callback_handler(
     elif action == "language":
 
         await language_command_handler(callback, i18n_data, settings)
+    elif action == "info":
+        i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+        current_lang = i18n_data.get("current_language",
+                                     settings.DEFAULT_LANGUAGE)
+        if not i18n:
+            await callback.answer("Language service error.",
+                                  show_alert=True)
+            return
+        _ = lambda key, **kwargs: i18n.gettext(
+            current_lang, key, **kwargs) if i18n else key
+
+        privacy_url = settings.PRIVACY_POLICY_URL
+        user_agreement_url = settings.USER_AGREEMENT_URL or settings.TERMS_OF_SERVICE_URL
+
+        if not privacy_url and not user_agreement_url:
+            await callback.answer(_("error_occurred_try_again"),
+                                  show_alert=True)
+            return
+
+        reply_markup = get_information_links_keyboard(
+            current_lang,
+            i18n,
+            privacy_url,
+            user_agreement_url,
+        )
+        try:
+            await callback.message.edit_text(_(key="info_links_message"),
+                                             reply_markup=reply_markup)
+        except Exception:
+            await callback.message.answer(_(key="info_links_message"),
+                                          reply_markup=reply_markup)
+        await callback.answer()
     elif action == "back_to_main":
         await send_main_menu(callback,
                              settings,

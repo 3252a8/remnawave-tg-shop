@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     SUPPORT_LINK: Optional[str] = Field(default=None)
     SERVER_STATUS_URL: Optional[str] = Field(default=None)
     TERMS_OF_SERVICE_URL: Optional[str] = Field(default=None)
+    PRIVACY_POLICY_URL: Optional[str] = Field(default=None)
+    USER_AGREEMENT_URL: Optional[str] = Field(default=None)
     REQUIRED_CHANNEL_ID: Optional[int] = Field(
         default=None,
         description="Telegram channel ID the user must join to access the bot")
@@ -505,6 +507,8 @@ class Settings(BaseSettings):
         'PLATEGA_FAILED_URL',
         'SEVERPAY_RETURN_URL',
         'CRYPT4_REDIRECT_URL',
+        'PRIVACY_POLICY_URL',
+        'USER_AGREEMENT_URL',
         mode='before',
     )
     @classmethod

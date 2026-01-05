@@ -55,11 +55,33 @@ def get_main_menu_inline_keyboard(
             InlineKeyboardButton(text=_(key="menu_support_button"),
                                  url=settings.SUPPORT_LINK))
 
-    if settings.TERMS_OF_SERVICE_URL:
+    user_agreement_url = settings.USER_AGREEMENT_URL or settings.TERMS_OF_SERVICE_URL
+    if settings.PRIVACY_POLICY_URL or user_agreement_url:
         builder.row(
-            InlineKeyboardButton(text=_(key="menu_terms_button"),
-                                 url=settings.TERMS_OF_SERVICE_URL))
+            InlineKeyboardButton(text=_(key="menu_info_button"),
+                                 callback_data="main_action:info"))
 
+    return builder.as_markup()
+
+
+def get_information_links_keyboard(
+        lang: str,
+        i18n_instance,
+        privacy_policy_url: Optional[str],
+        user_agreement_url: Optional[str]) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    if privacy_policy_url:
+        builder.row(
+            InlineKeyboardButton(text=_(key="privacy_policy_button"),
+                                 url=privacy_policy_url))
+    if user_agreement_url:
+        builder.row(
+            InlineKeyboardButton(text=_(key="user_agreement_button"),
+                                 url=user_agreement_url))
+    builder.row(
+        InlineKeyboardButton(text=_(key="back_to_main_menu_button"),
+                             callback_data="main_action:back_to_main"))
     return builder.as_markup()
 
 
