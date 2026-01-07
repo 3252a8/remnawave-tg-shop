@@ -96,6 +96,12 @@ class PlategaService:
 
         # Remove optional keys with falsy values to avoid validation errors
         clean_body = {k: v for k, v in body.items() if v not in (None, "")}
+        safe_headers = {
+            "X-MerchantId": self._auth_headers.get("X-MerchantId"),
+            "X-Secret": "***" if self._auth_headers.get("X-Secret") else "",
+            "Content-Type": self._auth_headers.get("Content-Type"),
+        }
+        logging.info("Platega create_transaction request: url=%s headers=%s body=%s", url, safe_headers, clean_body)
 
         try:
             async with session.post(url, json=clean_body, headers=self._auth_headers) as response:
