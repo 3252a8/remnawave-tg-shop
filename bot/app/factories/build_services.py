@@ -14,6 +14,7 @@ from bot.services.panel_webhook_service import PanelWebhookService
 from bot.services.freekassa_service import FreeKassaService
 from bot.services.platega_service import PlategaService
 from bot.services.severpay_service import SeverPayService
+from bot.services.lknpd_service import LknpdService
 
 
 def build_core_services(
@@ -72,6 +73,11 @@ def build_core_services(
         bot_username_for_default_return=bot_username_for_default_return,
         settings_obj=settings,
     )
+    lknpd_service = LknpdService(
+        settings.LKNPD_INN,
+        settings.LKNPD_PASSWORD,
+        api_url=settings.LKNPD_API_URL,
+    )
 
     # Wire services that depend on each other
     try:
@@ -92,6 +98,7 @@ def build_core_services(
         "freekassa_service": freekassa_service,
         "panel_webhook_service": panel_webhook_service,
         "yookassa_service": yookassa_service,
+        "lknpd_service": lknpd_service,
         "platega_service": platega_service,
         "severpay_service": severpay_service,
     }

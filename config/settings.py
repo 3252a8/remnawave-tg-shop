@@ -48,6 +48,32 @@ class Settings(BaseSettings):
         description="When true, new YooKassa payments in autopay mode force card binding without a user checkbox."
     )
 
+    LKNPD_INN: Optional[str] = Field(
+        default=None,
+        alias="NALOGO_INN",
+        description="INN for lknpd.nalog.ru (self-employed) authentication"
+    )
+    LKNPD_PASSWORD: Optional[str] = Field(
+        default=None,
+        alias="NALOGO_PASSWORD",
+        description="Password for lknpd.nalog.ru (self-employed) authentication"
+    )
+    LKNPD_API_URL: str = Field(
+        default="https://lknpd.nalog.ru/api",
+        alias="NALOGO_API_URL",
+        description="Base URL for LKNPD API (can be overridden for proxies)"
+    )
+    LKNPD_RECEIPT_NAME_SUBSCRIPTION: str = Field(
+        default="subscription {months} months",
+        alias="NALOGO_RECEIPT_NAME_SUBSCRIPTION",
+        description="Receipt item name for time-based subscriptions. Use {months} placeholder for duration."
+    )
+    LKNPD_RECEIPT_NAME_TRAFFIC: str = Field(
+        default="traffic package {gb} GB",
+        alias="NALOGO_RECEIPT_NAME_TRAFFIC",
+        description="Receipt item name for traffic packages. Use {gb} placeholder for traffic amount."
+    )
+
     WEBHOOK_BASE_URL: Optional[str] = None
 
     CRYPTOPAY_TOKEN: Optional[str] = None
@@ -490,9 +516,22 @@ class Settings(BaseSettings):
         return methods or default_order
     
     # Logging Configuration
+    LOG_LEVEL: str = Field(
+        default="INFO",
+        description="Global log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
     LOG_CHAT_ID: Optional[int] = Field(default=None, description="Telegram chat/group ID for sending notifications")
     LOG_THREAD_ID: Optional[int] = Field(default=None, description="Thread ID for supergroup messages (optional)")
     
+    @field_validator('LOG_LEVEL', mode='before')
+    @classmethod
+    def normalize_log_level(cls, v):
+        if isinstance(v, str):
+            v = v.strip().upper()
+        if not v:
+            return "INFO"
+        return v
+
     @field_validator('LOG_CHAT_ID', 'LOG_THREAD_ID', mode='before')
     @classmethod
     def validate_optional_int_fields(cls, v):
@@ -559,6 +598,16 @@ def get_settings() -> Settings:
             if not _settings_instance.YOOKASSA_SHOP_ID or not _settings_instance.YOOKASSA_SECRET_KEY:
                 logging.warning(
                     "CRITICAL: YooKassa credentials (SHOP_ID or SECRET_KEY) are not set. Payments will not work."
+                )
+            if (
+                _settings_instance.LKNPD_INN
+                or _settings_instance.LKNPD_PASSWORD
+            ) and not (
+                _settings_instance.LKNPD_INN
+                and _settings_instance.LKNPD_PASSWORD
+            ):
+                logging.warning(
+                    "WARNING: LKNPD credentials are incomplete. Receipt sending will be disabled."
                 )
             if _settings_instance.FREEKASSA_ENABLED:
                 if (
