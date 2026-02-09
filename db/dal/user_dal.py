@@ -5,7 +5,8 @@ from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import update, delete, func, and_, or_
+from sqlalchemy import update, delete, func, and_, or_, desc
+from sqlalchemy.orm import aliased
 from datetime import datetime, timezone
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -360,3 +361,97 @@ async def delete_user_and_relations(session: AsyncSession, user_id: int) -> bool
     await session.delete(user)
     await session.flush()
     return True
+
+
+async def get_top_users_by_traffic_used(
+    session: AsyncSession,
+    *,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Return top users by total used traffic across all subscriptions."""
+    safe_limit = max(1, limit)
+
+    total_traffic_used = func.coalesce(func.sum(Subscription.traffic_used_bytes), 0)
+
+    stmt = (
+        select(
+            User.user_id,
+            User.username,
+            User.first_name,
+            total_traffic_used.label("traffic_used_bytes"),
+        )
+        .join(Subscription, Subscription.user_id == User.user_id, isouter=True)
+        .group_by(User.user_id, User.username, User.first_name)
+        .having(total_traffic_used > 0)
+        .order_by(desc("traffic_used_bytes"), User.user_id.asc())
+        .limit(safe_limit)
+    )
+
+    result = await session.execute(stmt)
+    return [dict(row._mapping) for row in result]
+
+
+async def get_top_users_by_referrals_count(
+    session: AsyncSession,
+    *,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Return top users by number of invited users."""
+    safe_limit = max(1, limit)
+    referred_user = aliased(User)
+
+    invited_count = func.count(referred_user.user_id)
+
+    stmt = (
+        select(
+            User.user_id,
+            User.username,
+            User.first_name,
+            invited_count.label("invited_count"),
+        )
+        .join(referred_user, referred_user.referred_by_id == User.user_id, isouter=True)
+        .group_by(User.user_id, User.username, User.first_name)
+        .having(invited_count > 0)
+        .order_by(desc("invited_count"), User.user_id.asc())
+        .limit(safe_limit)
+    )
+
+    result = await session.execute(stmt)
+    return [dict(row._mapping) for row in result]
+
+
+async def get_top_users_by_referral_revenue(
+    session: AsyncSession,
+    *,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Return top users by total revenue brought by all invited users."""
+    safe_limit = max(1, limit)
+    referred_user = aliased(User)
+
+    referral_revenue = func.coalesce(func.sum(Payment.amount), 0.0)
+
+    stmt = (
+        select(
+            User.user_id,
+            User.username,
+            User.first_name,
+            referral_revenue.label("referral_revenue"),
+        )
+        .join(referred_user, referred_user.referred_by_id == User.user_id, isouter=True)
+        .join(
+            Payment,
+            and_(
+                Payment.user_id == referred_user.user_id,
+                Payment.status == "succeeded",
+            ),
+            isouter=True,
+        )
+        .group_by(User.user_id, User.username, User.first_name)
+        .having(referral_revenue > 0)
+        .order_by(desc("referral_revenue"), User.user_id.asc())
+        .limit(safe_limit)
+    )
+
+    result = await session.execute(stmt)
+    return [dict(row._mapping) for row in result]

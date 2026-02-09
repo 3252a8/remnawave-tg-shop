@@ -64,10 +64,12 @@ def get_user_management_keyboard(i18n_instance, lang: str) -> InlineKeyboardMark
                    callback_data="admin_action:users_search_prompt")
     builder.button(text=_(key="admin_ban_management_section"),
                    callback_data="admin_section:ban_management")
+    builder.button(text=_(key="admin_user_ratings_button"),
+                   callback_data="admin_action:user_ratings")
     
     builder.button(text=_(key="back_to_admin_panel_button"),
                    callback_data="admin_action:main")
-    builder.adjust(2, 1, 1)
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 
 
@@ -459,4 +461,22 @@ def get_back_to_admin_panel_keyboard(lang: str,
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="back_to_admin_panel_button"),
                    callback_data="admin_action:main")
+    return builder.as_markup()
+
+
+def get_back_to_stats_monitoring_keyboard(lang: str,
+                                          i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="back_to_stats_monitoring_button"),
+                   callback_data="admin_section:stats_monitoring")
+    return builder.as_markup()
+
+
+def get_back_to_user_management_keyboard(lang: str,
+                                         i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="back_to_user_management_button"),
+                   callback_data="admin_section:user_management")
     return builder.as_markup()

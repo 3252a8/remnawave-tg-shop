@@ -2,6 +2,7 @@ import logging
 from aiogram import Router, F, types
 from typing import Optional, Dict, List
 from datetime import datetime
+import html
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import Settings
@@ -10,10 +11,32 @@ from db.dal import user_dal, payment_dal, panel_sync_dal
 from db.models import Payment, PanelSyncStatus
 from bot.services.panel_api_service import PanelApiService
 
-from bot.keyboards.inline.admin_keyboards import get_back_to_admin_panel_keyboard
+from bot.keyboards.inline.admin_keyboards import (
+    get_back_to_admin_panel_keyboard,
+    get_back_to_user_management_keyboard,
+)
 from bot.middlewares.i18n import JsonI18n
 
 router = Router(name="admin_statistics_router")
+
+
+def _format_rating_user_label(user_row: Dict[str, object]) -> str:
+    user_id = int(user_row.get("user_id", 0) or 0)
+    username = user_row.get("username")
+    first_name = user_row.get("first_name")
+
+    parts: List[str] = []
+    if username:
+        parts.append(f"@{html.escape(str(username))}")
+    elif first_name:
+        parts.append(html.escape(str(first_name)))
+
+    if not parts:
+        parts.append(f"ID {user_id}")
+    else:
+        parts.append(f"(ID {user_id})")
+
+    return " ".join(parts)
 
 
 async def show_statistics_handler(callback: types.CallbackQuery,
@@ -255,3 +278,78 @@ async def show_statistics_handler(callback: types.CallbackQuery,
                         reply_markup=get_back_to_admin_panel_keyboard(
                             current_lang, i18n))
                 break
+
+
+async def show_user_ratings_handler(
+    callback: types.CallbackQuery,
+    i18n_data: dict,
+    settings: Settings,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error displaying ratings.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    await callback.answer()
+
+    top_limit = 10
+    traffic_top = await user_dal.get_top_users_by_traffic_used(session, limit=top_limit)
+    invited_top = await user_dal.get_top_users_by_referrals_count(session, limit=top_limit)
+    revenue_top = await user_dal.get_top_users_by_referral_revenue(session, limit=top_limit)
+
+    text_parts: List[str] = [
+        _("admin_user_ratings_header", top_limit=top_limit),
+        "",
+        f"<b>{_('admin_user_ratings_traffic_title')}</b>",
+    ]
+
+    if traffic_top:
+        for idx, row in enumerate(traffic_top, start=1):
+            traffic_gb = float(row.get("traffic_used_bytes") or 0) / (1024**3)
+            text_parts.append(
+                _(
+                    "admin_user_ratings_traffic_item",
+                    rank=idx,
+                    user=_format_rating_user_label(row),
+                    traffic_gb=f"{traffic_gb:.2f}",
+                )
+            )
+    else:
+        text_parts.append(_("admin_user_ratings_empty"))
+
+    text_parts.extend(["", f"<b>{_('admin_user_ratings_invited_title')}</b>"])
+    if invited_top:
+        for idx, row in enumerate(invited_top, start=1):
+            text_parts.append(
+                _(
+                    "admin_user_ratings_invited_item",
+                    rank=idx,
+                    user=_format_rating_user_label(row),
+                    invited_count=int(row.get("invited_count") or 0),
+                )
+            )
+    else:
+        text_parts.append(_("admin_user_ratings_empty"))
+
+    text_parts.extend(["", f"<b>{_('admin_user_ratings_revenue_title')}</b>"])
+    if revenue_top:
+        for idx, row in enumerate(revenue_top, start=1):
+            text_parts.append(
+                _(
+                    "admin_user_ratings_revenue_item",
+                    rank=idx,
+                    user=_format_rating_user_label(row),
+                    revenue=f"{float(row.get('referral_revenue') or 0):.2f}",
+                )
+            )
+    else:
+        text_parts.append(_("admin_user_ratings_empty"))
+
+    await callback.message.edit_text(
+        "\n".join(text_parts),
+        reply_markup=get_back_to_user_management_keyboard(current_lang, i18n),
+        parse_mode="HTML",
+    )
