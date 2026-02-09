@@ -68,6 +68,20 @@ class SubscriptionService:
             strategy = traffic_stats.get("trafficLimitStrategy")
         return used, limit, strategy
 
+    def _extract_lifetime_used_traffic(
+        self, panel_user_data: Dict[str, Any]
+    ) -> Optional[int]:
+        traffic_stats = panel_user_data.get("userTraffic") or {}
+        lifetime = traffic_stats.get("lifetimeUsedTrafficBytes")
+        if lifetime is None:
+            lifetime = panel_user_data.get("lifetimeUsedTrafficBytes")
+        try:
+            if lifetime is None:
+                return None
+            return int(lifetime)
+        except (TypeError, ValueError):
+            return None
+
     async def _notify_admin_panel_user_creation_failed(self, user_id: int):
         if not self.bot or not self.i18n or not self.settings.ADMIN_IDS:
             return
@@ -852,6 +866,17 @@ class SubscriptionService:
             await subscription_dal.deactivate_all_user_subscriptions(session, user_id)
             await user_dal.update_user(session, user_id, {"panel_user_uuid": None})
             return None
+
+        panel_lifetime_used = self._extract_lifetime_used_traffic(panel_user_data)
+        if (
+            panel_lifetime_used is not None
+            and db_user.lifetime_used_traffic_bytes != panel_lifetime_used
+        ):
+            await user_dal.update_user(
+                session,
+                user_id,
+                {"lifetime_used_traffic_bytes": panel_lifetime_used},
+            )
 
         if local_active_sub:
             update_payload_local = {}

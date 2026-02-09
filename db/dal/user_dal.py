@@ -391,6 +391,31 @@ async def get_top_users_by_traffic_used(
     return [dict(row._mapping) for row in result]
 
 
+async def get_top_users_by_lifetime_traffic_used(
+    session: AsyncSession,
+    *,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Return top users by lifetime used traffic from panel data."""
+    safe_limit = max(1, limit)
+    lifetime_used = func.coalesce(User.lifetime_used_traffic_bytes, 0)
+
+    stmt = (
+        select(
+            User.user_id,
+            User.username,
+            User.first_name,
+            lifetime_used.label("lifetime_used_traffic_bytes"),
+        )
+        .where(lifetime_used > 0)
+        .order_by(desc("lifetime_used_traffic_bytes"), User.user_id.asc())
+        .limit(safe_limit)
+    )
+
+    result = await session.execute(stmt)
+    return [dict(row._mapping) for row in result]
+
+
 async def get_top_users_by_referrals_count(
     session: AsyncSession,
     *,

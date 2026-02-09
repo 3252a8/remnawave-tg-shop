@@ -136,6 +136,8 @@
   "back_to_stats_monitoring_button": "⬅️ К статистике",
   "admin_user_ratings_header": "🏆 <b>Рейтинг пользователей (ТОП {top_limit})</b>",
   "admin_user_ratings_traffic_title": "📊 По использованному трафику",
+  "admin_user_ratings_traffic_month_title": "📊 По использованному трафику за месяц",
+  "admin_user_ratings_traffic_lifetime_title": "📊 По использованному трафику за всё время",
   "admin_user_ratings_invited_title": "👥 По количеству приглашенных",
   "admin_user_ratings_revenue_title": "💸 По доходу с приглашенных",
   "admin_user_ratings_traffic_item": "{rank}. {user} — <b>{traffic_gb} ГБ</b>",

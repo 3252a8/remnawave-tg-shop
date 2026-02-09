@@ -18,6 +18,24 @@ from bot.middlewares.i18n import JsonI18n
 router = Router(name="admin_sync_router")
 
 
+def _extract_lifetime_used_traffic_bytes(panel_user_data: dict) -> Optional[int]:
+    user_traffic = panel_user_data.get("userTraffic") or {}
+    raw_value = (
+        user_traffic.get("lifetimeUsedTrafficBytes")
+        if isinstance(user_traffic, dict)
+        else None
+    )
+    if raw_value is None:
+        raw_value = panel_user_data.get("lifetimeUsedTrafficBytes")
+
+    try:
+        if raw_value is None:
+            return None
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def perform_sync(
     panel_service: PanelApiService,
     session: AsyncSession,
@@ -175,6 +193,14 @@ async def perform_sync(
                     logging.info(
                         f"Updated panel UUID for user {actual_user_id}: {panel_uuid}"
                     )
+
+                lifetime_used = _extract_lifetime_used_traffic_bytes(panel_user_dict)
+                if (
+                    lifetime_used is not None
+                    and existing_user.lifetime_used_traffic_bytes != lifetime_used
+                ):
+                    existing_user.lifetime_used_traffic_bytes = lifetime_used
+                    user_was_updated = True
 
                 # Ensure panel description contains Telegram fields
                 try:

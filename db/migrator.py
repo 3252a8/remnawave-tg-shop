@@ -112,6 +112,19 @@ def _migration_0003_normalize_referral_codes(connection: Connection) -> None:
         )
     )
 
+
+def _migration_0004_add_lifetime_used_traffic(connection: Connection) -> None:
+    inspector = inspect(connection)
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("users")}
+    if "lifetime_used_traffic_bytes" in columns:
+        return
+
+    connection.execute(
+        text(
+            "ALTER TABLE users ADD COLUMN lifetime_used_traffic_bytes BIGINT"
+        )
+    )
+
 MIGRATIONS: List[Migration] = [
     Migration(
         id="0001_add_channel_subscription_fields",
@@ -127,6 +140,11 @@ MIGRATIONS: List[Migration] = [
         id="0003_normalize_referral_codes",
         description="Normalize referral codes to uppercase for consistent lookups",
         upgrade=_migration_0003_normalize_referral_codes,
+    ),
+    Migration(
+        id="0004_add_lifetime_used_traffic",
+        description="Store lifetime traffic usage for users",
+        upgrade=_migration_0004_add_lifetime_used_traffic,
     ),
 ]
 

@@ -315,18 +315,36 @@ async def show_user_ratings_handler(
                         e_get_me)
 
     traffic_top = await user_dal.get_top_users_by_traffic_used(session, limit=top_limit)
+    lifetime_traffic_top = await user_dal.get_top_users_by_lifetime_traffic_used(
+        session, limit=top_limit
+    )
     invited_top = await user_dal.get_top_users_by_referrals_count(session, limit=top_limit)
     revenue_top = await user_dal.get_top_users_by_referral_revenue(session, limit=top_limit)
 
     text_parts: List[str] = [
         _("admin_user_ratings_header", top_limit=top_limit),
         "",
-        f"<b>{_('admin_user_ratings_traffic_title')}</b>",
+        f"<b>{_('admin_user_ratings_traffic_month_title')}</b>",
     ]
 
     if traffic_top:
         for idx, row in enumerate(traffic_top, start=1):
             traffic_gb = float(row.get("traffic_used_bytes") or 0) / (1024**3)
+            text_parts.append(
+                _(
+                    "admin_user_ratings_traffic_item",
+                    rank=idx,
+                    user=_format_rating_user_label(row, bot_username),
+                    traffic_gb=f"{traffic_gb:.2f}",
+                )
+            )
+    else:
+        text_parts.append(_("admin_user_ratings_empty"))
+
+    text_parts.extend(["", f"<b>{_('admin_user_ratings_traffic_lifetime_title')}</b>"])
+    if lifetime_traffic_top:
+        for idx, row in enumerate(lifetime_traffic_top, start=1):
+            traffic_gb = float(row.get("lifetime_used_traffic_bytes") or 0) / (1024**3)
             text_parts.append(
                 _(
                     "admin_user_ratings_traffic_item",
