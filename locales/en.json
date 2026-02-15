@@ -5,7 +5,7 @@
   "channel_subscription_verify_button": "Check subscription",
   "channel_subscription_check_failed": "Couldn't verify the subscription. Please try again later or contact support.",
   "channel_subscription_verified_success": "✅ Subscription confirmed! You're good to go.",
-  "main_menu_greeting": "Hi, {user_name}! 👋\nWhat would you like to do?",
+  "main_menu_greeting": "Hi, {user_name}! 👋\nWhat would you like to do?\n\nTo set up the connection on your device, go to \"My subscription\" and click \"Connect\". If needed, add access days in the \"Buy\" section.",
   "menu_activate_trial_button": "🆓 Free Trial",
   "menu_subscribe_inline": "🚀 Purchase",
   "menu_my_subscription_inline": "🔐 My Subscription",
