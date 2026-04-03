@@ -45,7 +45,7 @@
 
 1.  **Клонируйте репозиторий:**
     ```bash
-    git clone https://github.com/kavore/remnawave-tg-shop
+    git clone https://github.com/3252a8/remnawave-tg-shop
     cd remnawave-tg-shop
     ```
 
@@ -182,7 +182,7 @@
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/kavore/remnawave-tg-shop && cd remnawave-tg-shop
+git clone https://github.com/3252a8/remnawave-tg-shop && cd remnawave-tg-shop
 ```
 
 ### 2. Настройка переменных окружения
@@ -325,9 +325,14 @@ cd /opt/remnawave/nginx && docker compose down && docker compose up -d && docker
 
 ## 🐳 Docker
 
-Файлы `Dockerfile` и `docker-compose.yml` уже настроены для сборки и запуска проекта. `docker-compose.yml` использует готовый образ с GitHub Container Registry, но вы можете раскомментировать `build: .` для локальной сборки.
+Файлы `Dockerfile` и `docker-compose.yml` уже настроены для локальной сборки и запуска проекта. Если нужен готовый образ из GHCR, используйте `docker-compose-remote-server.yml` или переключите `docker-compose.yml` на строку `image:` вместо `build: .`.
 
-Для автоматической публикации образов настроены GitHub Actions (`.github/workflows`). По умолчанию образы пушатся в GitHub Container Registry и Docker Hub. Добавьте в Secrets репозитория значения `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN` (персональный access token или пароль для Docker Hub), чтобы загрузка в Docker Hub работала корректно.
+Образ публикуется в GitHub Container Registry по пути `ghcr.io/3252a8/remnawave-tg-shop`. GitHub Actions выкладывают теги `latest` и `0.1.0`: `latest` обновляется из `main`, а `0.1.0` появляется при сборке тега `v0.1.0`.
+
+Чтобы закрепить версию на сервере, можно запустить:
+```bash
+IMAGE_TAG=0.1.0 docker compose -f docker-compose-remote-server.yml up -d
+```
 
 ## 📁 Структура проекта
 
