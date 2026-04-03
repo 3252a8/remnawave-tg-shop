@@ -33,12 +33,18 @@ async def build_and_start_web_app(
         "panel_webhook_service",
         "platega_service",
         "severpay_service",
+        "promo_code_service",
+        "web_auth_service",
     ):
         # Access dispatcher workflow_data directly to avoid sequence protocol issues
         if hasattr(dp, "workflow_data") and key in dp.workflow_data:  # type: ignore
             app[key] = dp.workflow_data[key]  # type: ignore
+    if hasattr(dp, "workflow_data") and "bot_username" in dp.workflow_data:  # type: ignore
+        app["bot_username"] = dp.workflow_data["bot_username"]  # type: ignore
 
     setup_application(app, dp, bot=bot)
+    from bot.app.web.web_api import register_routes
+    register_routes(app)
 
     telegram_uses_webhook_mode = bool(settings.WEBHOOK_BASE_URL)
 

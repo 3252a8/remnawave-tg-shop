@@ -75,6 +75,21 @@ class Settings(BaseSettings):
     )
 
     WEBHOOK_BASE_URL: Optional[str] = None
+    WEB_APP_URL: Optional[str] = Field(default=None, description="Public HTTPS URL of the SvelteKit web portal")
+
+    BREVO_SMTP_HOST: Optional[str] = Field(default=None)
+    BREVO_SMTP_PORT: int = Field(default=587)
+    BREVO_SMTP_USERNAME: Optional[str] = Field(default=None)
+    BREVO_SMTP_PASSWORD: Optional[str] = Field(default=None)
+    BREVO_SMTP_USE_TLS: bool = Field(default=True)
+    BREVO_SMTP_USE_SSL: bool = Field(default=False)
+    BREVO_FROM_EMAIL: Optional[str] = Field(default=None)
+    BREVO_FROM_NAME: str = Field(default="Remnawave")
+
+    WEB_SESSION_TTL_DAYS: int = Field(default=30)
+    WEB_AUTH_CODE_TTL_MINUTES: int = Field(default=15)
+    WEB_AUTH_CODE_RESEND_COOLDOWN_SECONDS: int = Field(default=60)
+    WEB_TELEGRAM_LINK_CODE_TTL_MINUTES: int = Field(default=30)
 
     CRYPTOPAY_TOKEN: Optional[str] = None
     CRYPTOPAY_NETWORK: str = Field(default="mainnet")
@@ -546,6 +561,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         'REQUIRED_CHANNEL_LINK',
+        'WEB_APP_URL',
         'PLATEGA_RETURN_URL',
         'PLATEGA_FAILED_URL',
         'SEVERPAY_RETURN_URL',
@@ -598,6 +614,19 @@ def get_settings() -> Settings:
             if not _settings_instance.PANEL_API_URL:
                 logging.warning(
                     "CRITICAL: PANEL_API_URL is not set. Panel integration will not work."
+                )
+            if not _settings_instance.WEB_APP_URL:
+                logging.warning(
+                    "WEB_APP_URL is not set. Web portal links and Telegram login links will not be generated."
+                )
+            if not (
+                _settings_instance.BREVO_SMTP_HOST
+                and _settings_instance.BREVO_SMTP_USERNAME
+                and _settings_instance.BREVO_SMTP_PASSWORD
+                and (_settings_instance.BREVO_FROM_EMAIL or _settings_instance.BREVO_SMTP_USERNAME)
+            ):
+                logging.warning(
+                    "Brevo SMTP settings are incomplete. Email-based web authentication will not work."
                 )
             if not _settings_instance.YOOKASSA_SHOP_ID or not _settings_instance.YOOKASSA_SECRET_KEY:
                 logging.warning(

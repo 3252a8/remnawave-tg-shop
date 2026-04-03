@@ -28,6 +28,14 @@ class StarsService:
 
     async def create_invoice(self, session: AsyncSession, user_id: int, months: int,
                              stars_price: int, description: str, sale_mode: str = "subscription") -> Optional[int]:
+        chat_id = await user_dal.get_user_telegram_chat_id(session, user_id)
+        if chat_id is None:
+            logging.error(
+                "Failed to create Telegram Stars invoice for user %s: Telegram chat id is unavailable.",
+                user_id,
+            )
+            return None
+
         payment_record_data = {
             "user_id": user_id,
             "amount": float(stars_price),
@@ -51,7 +59,7 @@ class StarsService:
         prices = [LabeledPrice(label=description, amount=stars_price)]
         try:
             await self.bot.send_invoice(
-                chat_id=user_id,
+                chat_id=chat_id,
                 title=description,
                 description=description,
                 payload=payload,
@@ -169,13 +177,15 @@ class StarsService:
             preserve_message=True,
         )
         try:
-            await self.bot.send_message(
-                message.from_user.id,
-                success_msg,
-                reply_markup=markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+            chat_id = await user_dal.get_user_telegram_chat_id(session, message.from_user.id)
+            if chat_id is not None:
+                await self.bot.send_message(
+                    chat_id,
+                    success_msg,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
         except Exception as e_send:
             logging.error(
                 f"Failed to send stars payment success message: {e_send}")

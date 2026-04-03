@@ -43,7 +43,12 @@ class SeverPayService:
         self.base_url = (settings.SEVERPAY_BASE_URL or "https://severpay.io/api/merchant").rstrip("/")
         self.mid = settings.SEVERPAY_MID
         self.token = settings.SEVERPAY_TOKEN or ""
-        self.return_url = settings.SEVERPAY_RETURN_URL or f"https://t.me/{default_return_url}"
+        if settings.SEVERPAY_RETURN_URL:
+            self.return_url = settings.SEVERPAY_RETURN_URL
+        elif default_return_url.startswith(("http://", "https://")):
+            self.return_url = default_return_url
+        else:
+            self.return_url = f"https://t.me/{default_return_url}"
         self.lifetime_minutes = settings.SEVERPAY_LIFETIME_MINUTES
 
         self._timeout = ClientTimeout(total=15)
@@ -99,6 +104,7 @@ class SeverPayService:
         amount: float,
         currency: Optional[str],
         description: str,
+        email: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         if not self.configured:
             logging.error("SeverPayService is not configured. Cannot create payment.")
@@ -113,7 +119,7 @@ class SeverPayService:
             "order_id": str(payment_db_id),
             "amount": amount_str,
             "currency": currency_code,
-            "client_email": f"{user_id}@telegram.org",
+            "client_email": email or f"{user_id}@telegram.org",
             "client_id": str(user_id),
             "url_return": self.return_url,
         }
@@ -297,13 +303,15 @@ class SeverPayService:
                     preserve_message=True,
                 )
                 try:
-                    await self.bot.send_message(
-                        payment.user_id,
-                        text,
-                        reply_markup=markup,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
+                    chat_id = await user_dal.get_user_telegram_chat_id(session, payment.user_id)
+                    if chat_id is not None:
+                        await self.bot.send_message(
+                            chat_id,
+                            text,
+                            reply_markup=markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
                 except Exception as exc:
                     logging.error("SeverPay webhook: failed to notify user %s: %s", payment.user_id, exc)
 
@@ -341,7 +349,9 @@ class SeverPayService:
                 lang = db_user.language_code if db_user and db_user.language_code else self.settings.DEFAULT_LANGUAGE
                 _ = lambda k, **kw: self.i18n.gettext(lang, k, **kw) if self.i18n else k
                 try:
-                    await self.bot.send_message(payment.user_id, _("payment_failed"))
+                    chat_id = await user_dal.get_user_telegram_chat_id(session, payment.user_id)
+                    if chat_id is not None:
+                        await self.bot.send_message(chat_id, _("payment_failed"))
                 except Exception:
                     pass
                 return web.json_response({"status": True})

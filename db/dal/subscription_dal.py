@@ -9,10 +9,18 @@ from datetime import datetime, timezone, timedelta
 from db.models import Subscription, User
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def get_active_subscription_by_user_id(
         session: AsyncSession,
         user_id: int,
         panel_user_uuid: Optional[str] = None) -> Optional[Subscription]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(Subscription).where(
         Subscription.user_id == user_id,
         Subscription.is_active == True,
@@ -35,6 +43,7 @@ async def get_subscription_by_panel_subscription_uuid(
 
 async def get_active_subscriptions_for_user(session: AsyncSession, user_id: int) -> List[Subscription]:
     """Get all active subscriptions for a user."""
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(Subscription).where(
         Subscription.user_id == user_id,
         Subscription.is_active == True
@@ -69,6 +78,7 @@ async def set_user_subscriptions_cancelled_with_grace(
     Returns number of updated rows.
     """
     from datetime import datetime, timezone, timedelta
+    user_id = await _resolve_user_account_id(session, user_id)
     grace_end = datetime.now(timezone.utc) + timedelta(days=grace_days)
     stmt = (
         update(Subscription)
@@ -98,6 +108,10 @@ async def upsert_subscription(session: AsyncSession,
         )
         for key, value in sub_payload.items():
             if hasattr(existing_sub, key):
+                if key == "user_id" and value is not None:
+                    from .user_dal import get_user_by_id
+                    user = await get_user_by_id(session, value)
+                    value = user.user_id if user else value
                 setattr(existing_sub, key, value)
         await session.flush()
         await session.refresh(existing_sub)
@@ -120,6 +134,8 @@ async def upsert_subscription(session: AsyncSession,
                 raise ValueError(
                     f"User {sub_payload['user_id']} not found for new subscription with panel_uuid {panel_sub_uuid}."
                 )
+            sub_payload = dict(sub_payload)
+            sub_payload["user_id"] = user.user_id
 
         new_sub = Subscription(**sub_payload)
         session.add(new_sub)
@@ -148,6 +164,7 @@ async def deactivate_other_active_subscriptions(
 
 async def deactivate_all_user_subscriptions(
         session: AsyncSession, user_id: int) -> int:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = (
         update(Subscription)
         .where(Subscription.user_id == user_id, Subscription.is_active == True)
@@ -164,6 +181,7 @@ async def deactivate_all_user_subscriptions(
 async def delete_all_user_subscriptions(
         session: AsyncSession, user_id: int) -> int:
     """Completely delete all user subscriptions (for trial reset)"""
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = delete(Subscription).where(Subscription.user_id == user_id)
     result = await session.execute(stmt)
     if result.rowcount > 0:
@@ -188,6 +206,7 @@ async def update_subscription_end_date(
 
 async def has_any_subscription_for_user(session: AsyncSession,
                                         user_id: int) -> bool:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(Subscription.subscription_id).where(
         Subscription.user_id == user_id).limit(1)
     result = await session.execute(stmt)
@@ -229,6 +248,7 @@ async def find_subscription_for_notification_update(
     if subscription_end_date_to_match.tzinfo is None:
         subscription_end_date_to_match = subscription_end_date_to_match.replace(
             tzinfo=timezone.utc)
+    user_id = await _resolve_user_account_id(session, user_id)
 
     stmt = select(Subscription).where(
         Subscription.user_id == user_id, Subscription.is_active == True,

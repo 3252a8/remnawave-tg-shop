@@ -8,6 +8,13 @@ from datetime import datetime, timezone
 from db.models import PromoCode, PromoCodeActivation, User, Payment
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def create_promo_code(session: AsyncSession,
                             promo_data: Dict[str, Any]) -> PromoCode:
     new_promo = PromoCode(**promo_data)
@@ -137,6 +144,7 @@ async def increment_promo_code_usage(
 async def get_user_activation_for_promo(
         session: AsyncSession, promo_code_id: int,
         user_id: int) -> Optional[PromoCodeActivation]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(PromoCodeActivation).where(
         PromoCodeActivation.promo_code_id == promo_code_id,
         PromoCodeActivation.user_id == user_id).limit(1)
@@ -149,6 +157,7 @@ async def record_promo_activation(
         promo_code_id: int,
         user_id: int,
         payment_id: Optional[int] = None) -> Optional[PromoCodeActivation]:
+    user_id = await _resolve_user_account_id(session, user_id)
     existing_activation = await get_user_activation_for_promo(
         session, promo_code_id, user_id)
     if existing_activation:

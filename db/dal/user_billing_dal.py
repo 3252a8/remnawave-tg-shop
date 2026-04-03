@@ -6,7 +6,15 @@ from sqlalchemy.sql import func
 from db.models import UserBilling, UserPaymentMethod
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def get_user_billing(session: AsyncSession, user_id: int) -> Optional[UserBilling]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(UserBilling).where(UserBilling.user_id == user_id)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
@@ -20,6 +28,7 @@ async def upsert_yk_payment_method(
     card_last4: Optional[str] = None,
     card_network: Optional[str] = None,
 ) -> UserBilling:
+    user_id = await _resolve_user_account_id(session, user_id)
     existing = await get_user_billing(session, user_id)
     if existing:
         existing.yookassa_payment_method_id = payment_method_id
@@ -42,6 +51,7 @@ async def upsert_yk_payment_method(
 
 
 async def delete_yk_payment_method(session: AsyncSession, user_id: int) -> bool:
+    user_id = await _resolve_user_account_id(session, user_id)
     existing = await get_user_billing(session, user_id)
     if not existing:
         return False
@@ -65,6 +75,7 @@ async def upsert_user_payment_method(
     card_network: Optional[str] = None,
     set_default: bool = False,
 ) -> UserPaymentMethod:
+    user_id = await _resolve_user_account_id(session, user_id)
     existing_stmt = select(UserPaymentMethod).where(UserPaymentMethod.provider_payment_method_id == provider_payment_method_id)
     result = await session.execute(existing_stmt)
     existing: Optional[UserPaymentMethod] = result.scalar_one_or_none()
@@ -104,6 +115,7 @@ async def upsert_user_payment_method(
 
 
 async def list_user_payment_methods(session: AsyncSession, user_id: int, provider: Optional[str] = None) -> List[UserPaymentMethod]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(UserPaymentMethod).where(UserPaymentMethod.user_id == user_id)
     if provider:
         stmt = stmt.where(UserPaymentMethod.provider == provider)
@@ -113,6 +125,7 @@ async def list_user_payment_methods(session: AsyncSession, user_id: int, provide
 
 
 async def get_user_default_payment_method(session: AsyncSession, user_id: int, provider: str = "yookassa") -> Optional[UserPaymentMethod]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(UserPaymentMethod).where(
         UserPaymentMethod.user_id == user_id,
         UserPaymentMethod.provider == provider,
@@ -123,6 +136,7 @@ async def get_user_default_payment_method(session: AsyncSession, user_id: int, p
 
 
 async def set_user_default_payment_method(session: AsyncSession, user_id: int, method_id: int) -> bool:
+    user_id = await _resolve_user_account_id(session, user_id)
     methods = await list_user_payment_methods(session, user_id)
     if not any(m.method_id == method_id for m in methods):
         return False
@@ -132,6 +146,7 @@ async def set_user_default_payment_method(session: AsyncSession, user_id: int, m
 
 
 async def delete_user_payment_method(session: AsyncSession, user_id: int, method_id: int) -> bool:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(UserPaymentMethod).where(UserPaymentMethod.method_id == method_id, UserPaymentMethod.user_id == user_id)
     result = await session.execute(stmt)
     method = result.scalar_one_or_none()
@@ -151,6 +166,7 @@ async def delete_user_payment_method_by_provider_id(
 
     Useful when callbacks pass the provider id (e.g., YooKassa pm_...) instead of our internal method_id.
     """
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(UserPaymentMethod).where(
         UserPaymentMethod.user_id == user_id,
         UserPaymentMethod.provider_payment_method_id == provider_payment_method_id,
@@ -171,6 +187,7 @@ async def user_has_saved_payment_method(
 ) -> bool:
     """Return True if the user has at least one saved payment method."""
     try:
+        user_id = await _resolve_user_account_id(session, user_id)
         methods = await list_user_payment_methods(session, user_id, provider)
         if methods:
             return True

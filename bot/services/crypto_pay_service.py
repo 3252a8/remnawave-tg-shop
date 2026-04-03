@@ -235,13 +235,15 @@ class CryptoPayService:
                 preserve_message=True,
             )
             try:
-                await bot.send_message(
-                    user_id,
-                    text,
-                    reply_markup=markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                chat_id = await user_dal.get_user_telegram_chat_id(session, user_id)
+                if chat_id is not None:
+                    await bot.send_message(
+                        chat_id,
+                        text,
+                        reply_markup=markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
             except Exception as e:
                 logging.error(f"Failed to send CryptoPay success message: {e}")
 

@@ -50,15 +50,16 @@ class NotificationService:
         buttons = [
             [
                 InlineKeyboardButton(
-                    text=translate(
-                        "log_open_profile_link",
-                    ),
+                    text=translate("log_open_profile_link"),
                     url=f"tg://user?id={user_id}",
                 )
             ]
         ]
 
-        if referrer_id:
+        if user_id <= 0:
+            buttons = []
+
+        if referrer_id and referrer_id > 0:
             buttons.append([
                 InlineKeyboardButton(
                     text=translate(
@@ -194,7 +195,7 @@ class NotificationService:
         )
         
         referral_text = ""
-        if referred_by_id:
+        if referred_by_id and referred_by_id > 0:
             referrer_link = hd.link(str(referred_by_id), f"tg://user?id={referred_by_id}")
             referral_text = _(
                 "log_referral_suffix",

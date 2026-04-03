@@ -11,7 +11,7 @@ from bot.keyboards.inline.user_keyboards import (
 )
 from bot.services.yookassa_service import YooKassaService
 from bot.middlewares.i18n import JsonI18n
-from db.dal import user_billing_dal
+from db.dal import user_billing_dal, user_dal
 from db.models import Payment
 from sqlalchemy.future import select
 
@@ -31,9 +31,12 @@ async def payment_methods_manage(callback: types.CallbackQuery, settings: Settin
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+
     from db.dal.user_billing_dal import list_user_payment_methods
     get_text = _
-    methods = await list_user_payment_methods(session, callback.from_user.id)
+    methods = await list_user_payment_methods(session, resolved_user_id)
     cards: List[tuple] = []
 
     def _is_yoomoney_network(network: Optional[str]) -> bool:
@@ -84,13 +87,17 @@ async def payment_method_bind(callback: types.CallbackQuery, settings: Settings,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
-    metadata = {"user_id": str(callback.from_user.id), "bind_only": "1"}
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+    receipt_email_for_yk = resolved_user.email if resolved_user and resolved_user.email else settings.YOOKASSA_DEFAULT_RECEIPT_EMAIL
+
+    metadata = {"user_id": str(resolved_user_id), "bind_only": "1"}
     resp = await yookassa_service.create_payment(
         amount=1.00,
         currency="RUB",
         description="Bind card",
         metadata=metadata,
-        receipt_email=settings.YOOKASSA_DEFAULT_RECEIPT_EMAIL,
+        receipt_email=receipt_email_for_yk,
         save_payment_method=True,
         capture=False,
         bind_only=True,
@@ -138,6 +145,8 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
             pass
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
     parts = callback.data.split(":", 2)
     pm_id_raw = parts[2] if len(parts) >= 3 else ""
     deleted = False
@@ -150,17 +159,17 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
         )
         if pm_id_raw:
             if pm_id_raw.isdigit():
-                deleted = await delete_user_payment_method(session, callback.from_user.id, int(pm_id_raw))
+                deleted = await delete_user_payment_method(session, resolved_user_id, int(pm_id_raw))
             else:
-                deleted = await delete_user_payment_method_by_provider_id(session, callback.from_user.id, pm_id_raw)
+                deleted = await delete_user_payment_method_by_provider_id(session, resolved_user_id, pm_id_raw)
         try:
-            legacy_deleted = await user_billing_dal.delete_yk_payment_method(session, callback.from_user.id)
+            legacy_deleted = await user_billing_dal.delete_yk_payment_method(session, resolved_user_id)
             deleted = deleted or legacy_deleted
         except Exception:
             pass
         await session.commit()
 
-        methods = await list_user_payment_methods(session, callback.from_user.id)
+        methods = await list_user_payment_methods(session, resolved_user_id)
         text = _("payment_methods_title")
         cards = []
         for m in methods:
@@ -213,10 +222,13 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
-    billing = await user_billing_dal.get_user_billing(session, callback.from_user.id)
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+
+    billing = await user_billing_dal.get_user_billing(session, resolved_user_id)
     if not billing or not billing.yookassa_payment_method_id:
         from db.dal.user_billing_dal import list_user_payment_methods
-        methods = await list_user_payment_methods(session, callback.from_user.id)
+        methods = await list_user_payment_methods(session, resolved_user_id)
         if not methods:
             await callback.answer(_("payment_method_none"), show_alert=True)
             return
@@ -251,7 +263,7 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
             stmt = (
                 select(Payment)
                 .where(
-                    Payment.user_id == callback.from_user.id,
+                    Payment.user_id == resolved_user_id,
                     Payment.status == 'succeeded',
                     Payment.provider == 'yookassa',
                 )
@@ -278,7 +290,7 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
         stmt = (
             select(Payment)
             .where(
-                Payment.user_id == callback.from_user.id,
+                Payment.user_id == resolved_user_id,
                 Payment.status == 'succeeded',
                 Payment.provider == 'yookassa',
             )
@@ -334,19 +346,23 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+
     from db.dal import payment_dal
     payments = await payment_dal.get_recent_payment_logs_with_user(session, limit=30, offset=0)
-    user_payments = [p for p in payments if p.user_id == callback.from_user.id]
+    user_payments = [p for p in payments if p.user_id == resolved_user_id]
 
     selected_pm_provider_id: Optional[str] = None
     pm_filter_requested: bool = False
     try:
-        split_a, split_b, split_pm_id = callback.data.split(":", 2)
+        _, _, split_pm_id = callback.data.split(":", 2)
         if split_pm_id:
             pm_filter_requested = True
             if split_pm_id.isdigit():
                 from db.dal.user_billing_dal import list_user_payment_methods
-                methods = await list_user_payment_methods(session, callback.from_user.id)
+
+                methods = await list_user_payment_methods(session, resolved_user_id)
                 sel = next((m for m in methods if str(m.method_id) == split_pm_id), None)
                 if sel and sel.provider_payment_method_id:
                     selected_pm_provider_id = sel.provider_payment_method_id
@@ -424,8 +440,10 @@ async def payment_methods_list(callback: types.CallbackQuery, settings: Settings
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     from db.dal.user_billing_dal import list_user_payment_methods
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
     cards: List[tuple] = []
-    methods = await list_user_payment_methods(session, callback.from_user.id)
+    methods = await list_user_payment_methods(session, resolved_user_id)
     for m in methods:
         def _is_yoomoney_network(network: Optional[str]) -> bool:
             s = (network or "").lower()

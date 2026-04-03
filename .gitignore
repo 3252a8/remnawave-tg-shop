@@ -17,3 +17,9 @@ __pycache__/
 locales/ru_backup.json
 locales/en_backup.json
 db/models_old.py
+
+# Игнорировать артефакты SvelteKit-портала
+web/.svelte-kit/
+web/build/
+web/node_modules/
+web/.env

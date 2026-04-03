@@ -303,18 +303,21 @@ async def ensure_required_channel_subscription(
 
 
 @router.message(CommandStart())
+@router.message(CommandStart(magic=F.args.regexp(r"^link_([A-Za-z0-9]{8})$").as_("link_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^ref_((?:[uU][A-Za-z0-9]{9})|(?:[A-Za-z0-9]{9})|\d+)$").as_("ref_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^promo_(\w+)$").as_("promo_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^admin_user_(\d+)$").as_("admin_user_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^page_ref$").as_("page_ref_match")))
-@router.message(CommandStart(magic=F.args.regexp(r"^(?!ref_|promo_|admin_user_|page_ref$)([A-Za-z0-9_\-]{2,64})$").as_("ad_param_match")))
+@router.message(CommandStart(magic=F.args.regexp(r"^(?!ref_|promo_|admin_user_|page_ref$|link_)([A-Za-z0-9_\-]{2,64})$").as_("ad_param_match")))
 async def start_command_handler(message: types.Message,
                                 state: FSMContext,
                                 settings: Settings,
                                 i18n_data: dict,
                                 subscription_service: SubscriptionService,
                                 referral_service: ReferralService,
+                                web_auth_service,
                                 session: AsyncSession,
+                                link_match: Optional[re.Match] = None,
                                 ref_match: Optional[re.Match] = None,
                                 promo_match: Optional[re.Match] = None,
                                 page_ref_match: Optional[re.Match] = None,
@@ -379,6 +382,34 @@ async def start_command_handler(message: types.Message,
                 exc_info=True,
             )
             await message.answer(_("admin_user_card_error"))
+            return
+
+    if link_match:
+        link_code = link_match.group(1)
+        try:
+            await web_auth_service.consume_telegram_code(
+                session,
+                code=link_code,
+                purpose="telegram_link",
+                telegram_user_id=user_id,
+                request_ip=None,
+                user_agent=message.text,
+            )
+            linked_db_user = await user_dal.get_user_by_id(session, user_id)
+            if linked_db_user and linked_db_user.language_code:
+                current_lang = linked_db_user.language_code
+                i18n_data["current_language"] = current_lang
+                _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await message.answer(_("telegram_link_success"))
+        except Exception as link_error:
+            logging.error(
+                "Failed to link Telegram account for user %s using code %s: %s",
+                user_id,
+                link_code,
+                link_error,
+                exc_info=True,
+            )
+            await message.answer(_("telegram_link_failed"))
             return
 
     referred_by_user_id: Optional[int] = None

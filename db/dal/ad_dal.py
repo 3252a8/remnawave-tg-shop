@@ -8,6 +8,13 @@ from sqlalchemy import update, delete, func, and_
 from ..models import AdCampaign, AdAttribution, Payment
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def create_campaign(
     session: AsyncSession, *, source: str, start_param: str, cost: float
 ) -> AdCampaign:
@@ -57,6 +64,7 @@ async def toggle_campaign_active(session: AsyncSession, campaign_id: int, is_act
 
 
 async def ensure_attribution(session: AsyncSession, *, user_id: int, campaign_id: int) -> AdAttribution:
+    user_id = await _resolve_user_account_id(session, user_id)
     existing = await get_attribution_for_user(session, user_id)
     if existing:
         return existing
@@ -69,12 +77,14 @@ async def ensure_attribution(session: AsyncSession, *, user_id: int, campaign_id
 
 
 async def get_attribution_for_user(session: AsyncSession, user_id: int) -> Optional[AdAttribution]:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(AdAttribution).where(AdAttribution.user_id == user_id)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 
 async def mark_trial_activated(session: AsyncSession, user_id: int) -> bool:
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = (
         update(AdAttribution)
         .where(and_(AdAttribution.user_id == user_id, AdAttribution.trial_activated_at.is_(None)))

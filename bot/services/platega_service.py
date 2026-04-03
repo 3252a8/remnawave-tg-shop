@@ -41,8 +41,16 @@ class PlategaService:
         self.merchant_id = settings.PLATEGA_MERCHANT_ID
         self.secret = settings.PLATEGA_SECRET
         self.payment_method = settings.PLATEGA_PAYMENT_METHOD
-        self.return_url = settings.PLATEGA_RETURN_URL or f"https://t.me/{default_return_url}"
-        self.failed_url = settings.PLATEGA_FAILED_URL or self.return_url
+        if settings.PLATEGA_RETURN_URL:
+            self.return_url = settings.PLATEGA_RETURN_URL
+        elif default_return_url.startswith(("http://", "https://")):
+            self.return_url = default_return_url
+        else:
+            self.return_url = f"https://t.me/{default_return_url}"
+        if settings.PLATEGA_FAILED_URL:
+            self.failed_url = settings.PLATEGA_FAILED_URL
+        else:
+            self.failed_url = self.return_url
 
         self._timeout = ClientTimeout(total=20)
         self._session: Optional[ClientSession] = None
@@ -285,13 +293,15 @@ class PlategaService:
                     preserve_message=True,
                 )
                 try:
-                    await self.bot.send_message(
-                        payment.user_id,
-                        text,
-                        reply_markup=markup,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
+                    chat_id = await user_dal.get_user_telegram_chat_id(session, payment.user_id)
+                    if chat_id is not None:
+                        await self.bot.send_message(
+                            chat_id,
+                            text,
+                            reply_markup=markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
                 except Exception as exc:
                     logging.error("Platega webhook: failed to notify user %s: %s", payment.user_id, exc)
 
@@ -329,7 +339,9 @@ class PlategaService:
                 lang = db_user.language_code if db_user and db_user.language_code else self.settings.DEFAULT_LANGUAGE
                 _ = lambda k, **kw: self.i18n.gettext(lang, k, **kw) if self.i18n else k
                 try:
-                    await self.bot.send_message(payment.user_id, _("payment_failed"))
+                    chat_id = await user_dal.get_user_telegram_chat_id(session, payment.user_id)
+                    if chat_id is not None:
+                        await self.bot.send_message(chat_id, _("payment_failed"))
                 except Exception:
                     pass
                 return web.Response(text="ok_canceled")

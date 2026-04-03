@@ -13,7 +13,7 @@ from bot.keyboards.inline.user_keyboards import (
 from bot.middlewares.i18n import JsonI18n
 from bot.services.yookassa_service import YooKassaService
 from config.settings import Settings
-from db.dal import payment_dal, user_billing_dal
+from db.dal import payment_dal, user_billing_dal, user_dal
 
 router = Router(name="user_subscription_payments_yookassa_router")
 
@@ -128,7 +128,8 @@ async def _initiate_yk_payment(
     if payment_method_id:
         yookassa_metadata["used_saved_payment_method_id"] = payment_method_id
 
-    receipt_email_for_yk = settings.YOOKASSA_DEFAULT_RECEIPT_EMAIL
+    db_user = await user_dal.get_user_by_id(session, user_id)
+    receipt_email_for_yk = db_user.email if db_user and db_user.email else settings.YOOKASSA_DEFAULT_RECEIPT_EMAIL
 
     payment_response_yk = await yookassa_service.create_payment(
         amount=price_rub,

@@ -109,22 +109,41 @@ class SubscriptionService:
             return None, None, None, False
 
         current_local_panel_uuid = db_user.panel_user_uuid
-        panel_username_on_panel_standard = f"tg_{user_id}"
+        lookup_telegram_id = db_user.telegram_user_id
+        if lookup_telegram_id is None and user_id > 0 and db_user.email is None:
+            lookup_telegram_id = user_id
+        lookup_email = db_user.email
+        panel_username_on_panel_standard = (
+            f"tg_{lookup_telegram_id}" if lookup_telegram_id is not None else f"web_{abs(db_user.user_id)}"
+        )
 
         panel_user_obj_from_api = None
         panel_user_created_or_linked_now = False
 
-        panel_users_by_tg_id_list = await self.panel_service.get_users_by_filter(
-            telegram_id=user_id
-        )
-        if panel_users_by_tg_id_list and len(panel_users_by_tg_id_list) == 1:
-            panel_user_obj_from_api = panel_users_by_tg_id_list[0]
-            logging.info(
-                f"Found panel user by telegramId {user_id}: UUID {panel_user_obj_from_api.get('uuid')}, Username: {panel_user_obj_from_api.get('username')}"
+        panel_users_lookup: List[Dict[str, Any]] = []
+        if lookup_telegram_id is not None:
+            panel_users_lookup = await self.panel_service.get_users_by_filter(
+                telegram_id=lookup_telegram_id
             )
-        elif panel_users_by_tg_id_list and len(panel_users_by_tg_id_list) > 1:
+        elif lookup_email:
+            panel_users_lookup = await self.panel_service.get_users_by_filter(
+                email=lookup_email
+            )
+
+        if panel_users_lookup and len(panel_users_lookup) == 1:
+            panel_user_obj_from_api = panel_users_lookup[0]
+            if lookup_telegram_id is not None:
+                logging.info(
+                    f"Found panel user by telegramId {lookup_telegram_id}: UUID {panel_user_obj_from_api.get('uuid')}, Username: {panel_user_obj_from_api.get('username')}"
+                )
+            else:
+                logging.info(
+                    f"Found panel user by email {lookup_email}: UUID {panel_user_obj_from_api.get('uuid')}, Username: {panel_user_obj_from_api.get('username')}"
+                )
+        elif panel_users_lookup and len(panel_users_lookup) > 1:
+            identity_label = f"telegramId {lookup_telegram_id}" if lookup_telegram_id is not None else f"email {lookup_email}"
             logging.error(
-                f"CRITICAL: Multiple panel users found for telegramId {user_id}. Manual intervention needed."
+                f"CRITICAL: Multiple panel users found for {identity_label}. Manual intervention needed."
             )
             return None, None, None, False
 
@@ -132,21 +151,22 @@ class SubscriptionService:
             if current_local_panel_uuid:
 
                 logging.info(
-                    f"User {user_id} (local panel_uuid: {current_local_panel_uuid}) not found on panel by TG ID. Fetching by panel_uuid."
+                    f"User {user_id} (local panel_uuid: {current_local_panel_uuid}) not found on panel by primary identity. Fetching by panel_uuid."
                 )
                 panel_user_obj_from_api = await self.panel_service.get_user_by_uuid(
                     current_local_panel_uuid
                 )
                 if not panel_user_obj_from_api:
                     logging.warning(
-                        f"Local panel_uuid {current_local_panel_uuid} for TG user {user_id} also not found on panel. User might be deleted from panel or UUID desynced."
+                        f"Local panel_uuid {current_local_panel_uuid} for user {user_id} also not found on panel. User might be deleted from panel or UUID desynced."
                     )
                     logging.info(
-                        f"Creating new panel user '{panel_username_on_panel_standard}' for TG user {user_id}."
+                        f"Creating new panel user '{panel_username_on_panel_standard}' for user {user_id}."
                     )
                     creation_response = await self.panel_service.create_panel_user(
                         username_on_panel=panel_username_on_panel_standard,
-                        telegram_id=user_id,
+                        telegram_id=lookup_telegram_id,
+                        email=lookup_email,
                         description="\n".join([
                             (db_user.username or "") if db_user else "",
                             (db_user.first_name or "") if db_user else "",
@@ -171,11 +191,12 @@ class SubscriptionService:
             else:
 
                 logging.info(
-                    f"No panel user by TG ID & no local panel_uuid for TG user {user_id}. Creating new panel user '{panel_username_on_panel_standard}'."
+                    f"No panel user by primary identity & no local panel_uuid for user {user_id}. Creating new panel user '{panel_username_on_panel_standard}'."
                 )
                 creation_response = await self.panel_service.create_panel_user(
                     username_on_panel=panel_username_on_panel_standard,
-                    telegram_id=user_id,
+                    telegram_id=lookup_telegram_id,
+                    email=lookup_email,
                     description="\n".join([
                         (db_user.username or "") if db_user else "",
                         (db_user.first_name or "") if db_user else "",
@@ -198,11 +219,13 @@ class SubscriptionService:
                     logging.warning(
                         f"Panel user '{panel_username_on_panel_standard}' already exists (errorCode A019). Fetching by username."
                     )
-                    fetched_by_username_list = (
-                        await self.panel_service.get_users_by_filter(
-                            username=panel_username_on_panel_standard
-                        )
+                    fetched_by_username_list = await self.panel_service.get_users_by_filter(
+                        username=panel_username_on_panel_standard
                     )
+                    if not fetched_by_username_list and lookup_email:
+                        fetched_by_username_list = await self.panel_service.get_users_by_filter(
+                            email=lookup_email
+                        )
                     if fetched_by_username_list and len(fetched_by_username_list) == 1:
                         panel_user_obj_from_api = fetched_by_username_list[0]
 
@@ -259,10 +282,10 @@ class SubscriptionService:
             conflicting_user_record = await user_dal.get_user_by_panel_uuid(
                 session, actual_panel_uuid_from_api
             )
-            if conflicting_user_record and conflicting_user_record.user_id != user_id:
+            if conflicting_user_record and conflicting_user_record.user_id != db_user.user_id:
                 logging.error(
                     f"CRITICAL CONFLICT: Panel UUID {actual_panel_uuid_from_api} (from panel for TG ID {user_id}) "
-                    f"is ALREADY LINKED in local DB to a different TG User {conflicting_user_record.user_id}. "
+                    f"is ALREADY LINKED in local DB to a different User {conflicting_user_record.user_id}. "
                     f"Cannot update panel_user_uuid for user {user_id}. Manual data correction needed."
                 )
 
@@ -275,7 +298,7 @@ class SubscriptionService:
 
                 # Do not overwrite Telegram username with panel username.
                 # Only update the local linkage to panel UUID here.
-                await user_dal.update_user(session, user_id, update_data_for_local_user)
+                await user_dal.update_user(session, db_user.user_id, update_data_for_local_user)
                 db_user.panel_user_uuid = actual_panel_uuid_from_api
                 panel_user_created_or_linked_now = True
                 current_local_panel_uuid = actual_panel_uuid_from_api
@@ -293,16 +316,17 @@ class SubscriptionService:
         if (
             panel_user_obj_from_api
             and current_local_panel_uuid
-            and panel_telegram_id_int != user_id
+            and lookup_telegram_id is not None
+            and panel_telegram_id_int != lookup_telegram_id
         ):
             logging.info(
-                f"Panel user {current_local_panel_uuid} has telegramId '{panel_telegram_id_from_api}'. Updating on panel to '{user_id}'."
+                f"Panel user {current_local_panel_uuid} has telegramId '{panel_telegram_id_from_api}'. Updating on panel to '{lookup_telegram_id}'."
             )
             # Also set readable description with Telegram fields
             await self.panel_service.update_user_details_on_panel(
                 current_local_panel_uuid,
                 {
-                    "telegramId": user_id,
+                    "telegramId": lookup_telegram_id,
                     "description": "\n".join(
                         [
                             (db_user.username or "") if db_user else "",
@@ -1032,11 +1056,18 @@ class SubscriptionService:
             "auto_renew_for_subscription_id": str(sub.subscription_id),
             "subscription_months": str(months),
         }
+        user_record = await user_dal.get_user_by_id(session, sub.user_id)
+        receipt_email = (
+            user_record.email
+            if user_record and user_record.email
+            else getattr(self.settings, "YOOKASSA_DEFAULT_RECEIPT_EMAIL", None)
+        )
         resp = await yk.create_payment(
             amount=float(amount),
             currency="RUB",
             description=f"Auto-renewal for {months} months",
             metadata=metadata,
+            receipt_email=receipt_email,
             payment_method_id=default_pm.provider_payment_method_id,
             save_payment_method=False,
             capture=True,

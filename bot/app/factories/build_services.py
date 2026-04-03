@@ -14,6 +14,7 @@ from bot.services.panel_webhook_service import PanelWebhookService
 from bot.services.freekassa_service import FreeKassaService
 from bot.services.platega_service import PlategaService
 from bot.services.severpay_service import SeverPayService
+from bot.services.web_auth_service import WebAuthService
 from bot.services.lknpd_service import LknpdService
 
 
@@ -54,7 +55,7 @@ def build_core_services(
         async_session_factory=async_session_factory,
         subscription_service=subscription_service,
         referral_service=referral_service,
-        default_return_url=bot_username_for_default_return,
+        default_return_url=settings.PLATEGA_RETURN_URL or settings.WEB_APP_URL or bot_username_for_default_return,
     )
     severpay_service = SeverPayService(
         bot=bot,
@@ -63,13 +64,14 @@ def build_core_services(
         async_session_factory=async_session_factory,
         subscription_service=subscription_service,
         referral_service=referral_service,
-        default_return_url=bot_username_for_default_return,
+        default_return_url=settings.SEVERPAY_RETURN_URL or settings.WEB_APP_URL or bot_username_for_default_return,
     )
     panel_webhook_service = PanelWebhookService(bot, settings, i18n, async_session_factory, panel_service)
+    web_auth_service = WebAuthService(settings, bot_username=bot_username_for_default_return)
     yookassa_service = YooKassaService(
         shop_id=settings.YOOKASSA_SHOP_ID,
         secret_key=settings.YOOKASSA_SECRET_KEY,
-        configured_return_url=settings.YOOKASSA_RETURN_URL,
+        configured_return_url=settings.YOOKASSA_RETURN_URL or settings.WEB_APP_URL,
         bot_username_for_default_return=bot_username_for_default_return,
         settings_obj=settings,
     )
@@ -97,6 +99,7 @@ def build_core_services(
         "cryptopay_service": cryptopay_service,
         "freekassa_service": freekassa_service,
         "panel_webhook_service": panel_webhook_service,
+        "web_auth_service": web_auth_service,
         "yookassa_service": yookassa_service,
         "lknpd_service": lknpd_service,
         "platega_service": platega_service,

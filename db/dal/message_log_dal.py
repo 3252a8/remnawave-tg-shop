@@ -7,6 +7,13 @@ from sqlalchemy import func, or_
 from ..models import MessageLog, User
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def create_message_log(session: AsyncSession,
                              log_data: dict) -> Optional[MessageLog]:
 
@@ -38,6 +45,7 @@ async def count_all_message_logs(session: AsyncSession) -> int:
 
 async def get_user_message_logs(session: AsyncSession, user_id_to_search: int,
                                 limit: int, offset: int) -> List[MessageLog]:
+    user_id_to_search = await _resolve_user_account_id(session, user_id_to_search)
     stmt = (select(MessageLog).where(
         or_(MessageLog.user_id == user_id_to_search,
             MessageLog.target_user_id == user_id_to_search)).order_by(
@@ -48,6 +56,7 @@ async def get_user_message_logs(session: AsyncSession, user_id_to_search: int,
 
 async def count_user_message_logs(session: AsyncSession,
                                   user_id_to_search: int) -> int:
+    user_id_to_search = await _resolve_user_account_id(session, user_id_to_search)
     stmt = (select(func.count()).select_from(MessageLog).where(
         or_(MessageLog.user_id == user_id_to_search,
             MessageLog.target_user_id == user_id_to_search)))
@@ -66,6 +75,12 @@ async def create_message_log_no_commit(session: AsyncSession,
                 f"Target user {log_data['target_user_id']} not found for message log. Setting to NULL."
             )
             log_data["target_user_id"] = None
+        else:
+            log_data["target_user_id"] = target_user.user_id
+
+    if log_data.get("user_id"):
+        resolved_user_id = await _resolve_user_account_id(session, log_data["user_id"])
+        log_data["user_id"] = resolved_user_id
 
     new_log = MessageLog(**log_data)
     session.add(new_log)

@@ -367,22 +367,24 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                 )
                 details_message = _("payment_successful_error_details")
 
-            details_markup = get_connect_and_main_keyboard(
-                user_lang,
-                i18n,
-                settings,
-                config_link_display,
-                connect_button_url=connect_button_url,
-                preserve_message=True,
-            )
+        details_markup = get_connect_and_main_keyboard(
+            user_lang,
+            i18n,
+            settings,
+            config_link_display,
+            connect_button_url=connect_button_url,
+            preserve_message=True,
+        )
         try:
-            await bot.send_message(
-                user_id,
-                details_message,
-                reply_markup=details_markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+            chat_id = await user_dal.get_user_telegram_chat_id(session, user_id)
+            if chat_id is not None:
+                await bot.send_message(
+                    chat_id,
+                    details_message,
+                    reply_markup=details_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
         except Exception as e_notify:
             logging.error(
                 f"Failed to send payment details message to user {user_id}: {e_notify}"
@@ -454,7 +456,9 @@ async def process_cancelled_payment(session: AsyncSession, bot: Bot,
         if db_user and db_user.language_code: user_lang = db_user.language_code
 
         _ = lambda key, **kwargs: i18n.gettext(user_lang, key, **kwargs)
-        await bot.send_message(user_id, _("payment_failed"))
+        chat_id = await user_dal.get_user_telegram_chat_id(session, user_id)
+        if chat_id is not None:
+            await bot.send_message(chat_id, _("payment_failed"))
 
     except Exception as e_process_cancel:
         logging.error(
@@ -642,11 +646,13 @@ async def yookassa_webhook_route(request: web.Request):
                                                 i18n_lang = db_user.language_code
                                             _ = lambda key, **kwargs: i18n_instance.gettext(i18n_lang, key, **kwargs)
                                             from bot.keyboards.inline.user_keyboards import get_back_to_payment_methods_keyboard
-                                            await bot.send_message(
-                                                chat_id=user_id,
-                                                text=_("payment_method_bound_success"),
-                                                reply_markup=get_back_to_payment_methods_keyboard(i18n_lang, i18n_instance)
-                                            )
+                                            chat_id = await user_dal.get_user_telegram_chat_id(session, user_id)
+                                            if chat_id is not None:
+                                                await bot.send_message(
+                                                    chat_id=chat_id,
+                                                    text=_("payment_method_bound_success"),
+                                                    reply_markup=get_back_to_payment_methods_keyboard(i18n_lang, i18n_instance)
+                                                )
                                         except Exception:
                                             pass
                                         # Attempt to cancel the authorization to avoid charge hold

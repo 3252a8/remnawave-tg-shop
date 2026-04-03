@@ -132,13 +132,19 @@ class ReferralService:
                                 inviter_lang = inviter_user_model.language_code or default_lang_for_placeholder
                                 _i = lambda k, **kw: self.i18n.gettext(
                                     inviter_lang, k, **kw)
-                                await self.bot.send_message(
-                                    inviter_user_id,
-                                    _i("referral_bonus_inviter_notification_extended",
-                                       days=inviter_bonus_days,
-                                       referee_name=referee_name_for_msg,
-                                       new_end_date=new_end_date_inviter.
-                                       strftime('%Y-%m-%d')))
+                                inviter_chat_id = await user_dal.get_user_telegram_chat_id(
+                                    session, inviter_user_id
+                                )
+                                if inviter_chat_id is not None:
+                                    await self.bot.send_message(
+                                        inviter_chat_id,
+                                        _i(
+                                            "referral_bonus_inviter_notification_extended",
+                                            days=inviter_bonus_days,
+                                            referee_name=referee_name_for_msg,
+                                            new_end_date=new_end_date_inviter.strftime("%Y-%m-%d"),
+                                        ),
+                                    )
                             except Exception as e_notify_inviter:
                                 logging.error(
                                     f"Failed to send bonus notification to inviter {inviter_user_id}: {e_notify_inviter}"
@@ -205,14 +211,19 @@ class ReferralService:
                                         inviter_lang = inviter_user_model.language_code or default_lang_for_placeholder
                                         _i = lambda k, **kw: self.i18n.gettext(
                                             inviter_lang, k, **kw)
-                                        await self.bot.send_message(
-                                            inviter_user_id,
-                                            _i("referral_bonus_inviter_notification_new_sub",
-                                               days=inviter_bonus_days,
-                                               referee_name=
-                                               referee_name_for_msg,
-                                               new_end_date=bonus_end_date.
-                                               strftime('%Y-%m-%d')))
+                                        inviter_chat_id = await user_dal.get_user_telegram_chat_id(
+                                            session, inviter_user_id
+                                        )
+                                        if inviter_chat_id is not None:
+                                            await self.bot.send_message(
+                                                inviter_chat_id,
+                                                _i(
+                                                    "referral_bonus_inviter_notification_new_sub",
+                                                    days=inviter_bonus_days,
+                                                    referee_name=referee_name_for_msg,
+                                                    new_end_date=bonus_end_date.strftime("%Y-%m-%d"),
+                                                ),
+                                            )
                                     else:
                                         logging.warning(
                                             f"Failed to update panel for new bonus subscription for inviter {inviter_user_id}. Local bonus sub created (ID: {bonus_sub.subscription_id}) but may not be active on panel."
@@ -292,10 +303,12 @@ class ReferralService:
         from db.dal import user_dal, payment_dal
         
         try:
+            user = await user_dal.get_user_by_id(session, user_id)
+            resolved_user_id = user.user_id if user else user_id
             # Count total invited users (referrals)
             invited_count_result = await session.execute(
                 text("SELECT COUNT(*) FROM users WHERE referred_by_id = :user_id"),
-                {"user_id": user_id}
+                {"user_id": resolved_user_id}
             )
             invited_count = invited_count_result.scalar() or 0
             
@@ -308,7 +321,7 @@ class ReferralService:
                     WHERE u.referred_by_id = :user_id 
                     AND p.status = 'succeeded'
                 """),
-                {"user_id": user_id}
+                {"user_id": resolved_user_id}
             )
             purchased_count = purchased_count_result.scalar() or 0
             

@@ -9,7 +9,7 @@ on:
       - dev
 
 env:
-  GHCR_IMAGE: ghcr.io/3252a8/remnawave-tg-shop
+  GHCR_ORG: ghcr.io/3252a8
 
 jobs:
   build:
@@ -17,6 +17,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: bot
+            image_name: remnawave-tg-shop
+            context: .
+            dockerfile: ./Dockerfile
+          - name: web
+            image_name: remnawave-tg-shop-web
+            context: ./web
+            dockerfile: ./web/Dockerfile
 
     steps:
     - name: Checkout repository
@@ -32,12 +44,12 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Extract metadata (tags, labels) for Docker
+    - name: Extract metadata (tags, labels) for Docker (${{ matrix.name }})
       id: meta
       uses: docker/metadata-action@v5
       with:
         images: |
-          ${{ env.GHCR_IMAGE }}
+          ${{ env.GHCR_ORG }}/${{ matrix.image_name }}
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -45,10 +57,11 @@ jobs:
         flavor: |
           latest=false
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image (${{ matrix.name }})
       uses: docker/build-push-action@v5
       with:
-        context: .
+        context: ${{ matrix.context }}
+        file: ${{ matrix.dockerfile }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}

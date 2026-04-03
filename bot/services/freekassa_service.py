@@ -388,13 +388,15 @@ class FreeKassaService:
                 preserve_message=True,
             )
             try:
-                await self.bot.send_message(
-                    payment.user_id,
-                    text,
-                    reply_markup=markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                chat_id = await user_dal.get_user_telegram_chat_id(session, payment.user_id)
+                if chat_id is not None:
+                    await self.bot.send_message(
+                        chat_id,
+                        text,
+                        reply_markup=markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
             except Exception as e:
                 logging.error(f"FreeKassa notification: failed to send message to user {payment.user_id}: {e}")
 

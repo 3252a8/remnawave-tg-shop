@@ -8,6 +8,13 @@ from sqlalchemy.orm import selectinload
 from db.models import Payment, User
 
 
+async def _resolve_user_account_id(session: AsyncSession, user_id: int) -> int:
+    from .user_dal import get_user_by_id
+
+    user = await get_user_by_id(session, user_id)
+    return user.user_id if user else user_id
+
+
 async def create_payment_record(session: AsyncSession,
                                 payment_data: Dict[str, Any]) -> Payment:
 
@@ -27,6 +34,9 @@ async def create_payment_record(session: AsyncSession,
             raise ValueError(
                 f"Promo code with id {payment_data['promo_code_id']} not found."
             )
+
+    payment_data = dict(payment_data)
+    payment_data["user_id"] = user.user_id
 
     new_payment = Payment(**payment_data)
     session.add(new_payment)
@@ -65,6 +75,8 @@ async def ensure_payment_with_provider_id(
     existing = await get_payment_by_provider_payment_id(session, provider_payment_id)
     if existing:
         return existing
+
+    user_id = await _resolve_user_account_id(session, user_id)
 
     pending_status = f"pending_{provider}" if provider else "pending"
     payment_payload: Dict[str, Any] = {
@@ -148,6 +160,7 @@ async def count_user_succeeded_payments(
     from the count. Useful to check "prior" payments while processing the
     current payment in the same transaction.
     """
+    user_id = await _resolve_user_account_id(session, user_id)
     conditions = [Payment.user_id == user_id, Payment.status == 'succeeded']
     if exclude_payment_id is not None:
         conditions.append(Payment.payment_id != exclude_payment_id)
@@ -242,6 +255,7 @@ async def get_financial_statistics(session: AsyncSession) -> Dict[str, Any]:
 
 async def get_user_total_paid(session: AsyncSession, user_id: int) -> float:
     """Get total amount paid by a specific user (sum of all succeeded payments)."""
+    user_id = await _resolve_user_account_id(session, user_id)
     stmt = select(func.sum(Payment.amount)).where(
         and_(
             Payment.user_id == user_id,
@@ -260,6 +274,7 @@ async def get_referral_revenue(session: AsyncSession, referrer_id: int) -> float
     where referred_by_id equals the referrer_id.
     """
     from db.models import User
+    referrer_id = await _resolve_user_account_id(session, referrer_id)
     
     stmt = select(func.sum(Payment.amount)).join(
         User, Payment.user_id == User.user_id

@@ -250,6 +250,8 @@ async def run_bot(settings_param: Settings):
             f"Failed to get bot info (e.g., for YooKassa default URL): {e}. Using fallback: {actual_bot_username}"
         )
 
+    dispatcher["bot_username"] = actual_bot_username
+
     services = build_core_services(
         settings_param,
         bot,

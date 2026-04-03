@@ -17,7 +17,7 @@ from bot.keyboards.inline.user_keyboards import (
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.middlewares.i18n import JsonI18n
-from db.dal import subscription_dal, user_billing_dal
+from db.dal import subscription_dal, user_billing_dal, user_dal
 from db.models import Subscription
 
 router = Router(name="user_subscription_core_router")
@@ -565,15 +565,18 @@ async def toggle_autorenew_handler(
             pass
         return
 
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+
     sub = await session.get(Subscription, sub_id)
-    if not sub or sub.user_id != callback.from_user.id:
+    if not sub or sub.user_id != resolved_user_id:
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
     if sub.provider != "yookassa":
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
     if enable:
-        has_saved_card = await user_billing_dal.user_has_saved_payment_method(session, callback.from_user.id)
+        has_saved_card = await user_billing_dal.user_has_saved_payment_method(session, resolved_user_id)
         if not has_saved_card:
             try:
                 await callback.answer(get_text("autorenew_enable_requires_card"), show_alert=True)
@@ -623,15 +626,18 @@ async def confirm_autorenew_handler(
             pass
         return
 
+    resolved_user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    resolved_user_id = resolved_user.user_id if resolved_user else callback.from_user.id
+
     sub = await session.get(Subscription, sub_id)
-    if not sub or sub.user_id != callback.from_user.id:
+    if not sub or sub.user_id != resolved_user_id:
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
     if sub.provider != "yookassa":
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
     if enable:
-        has_saved_card = await user_billing_dal.user_has_saved_payment_method(session, callback.from_user.id)
+        has_saved_card = await user_billing_dal.user_has_saved_payment_method(session, resolved_user_id)
         if not has_saved_card:
             try:
                 await callback.answer(get_text("autorenew_enable_requires_card"), show_alert=True)
@@ -702,3 +708,58 @@ async def connect_command_handler(
 ):
     logging.info(f"User {message.from_user.id} used /connect command.")
     await my_subscription_command_handler(message, i18n_data, settings, panel_service, subscription_service, session, bot)
+
+
+@router.message(Command("portal"))
+async def portal_command_handler(
+    message: types.Message,
+    settings: Settings,
+    i18n_data: dict,
+    web_auth_service,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    if not settings.WEB_APP_URL:
+        await message.answer(_("error_service_unavailable"))
+        return
+
+    try:
+        result = await web_auth_service.request_telegram_code(
+            session,
+            user_id=message.from_user.id,
+            purpose="web_login",
+            language_code=current_lang,
+            request_ip=None,
+            user_agent=message.text,
+        )
+    except Exception as exc:
+        logging.error(
+            "Failed to issue web portal login code for user %s: %s",
+            message.from_user.id,
+            exc,
+            exc_info=True,
+        )
+        await message.answer(_("error_occurred_try_again"))
+        return
+
+    web_url = result.get("web_url") or settings.WEB_APP_URL
+    code = result.get("code", "")
+    expires_at = result.get("expires_at")
+    expires_at_str = expires_at.strftime("%H:%M") if hasattr(expires_at, "strftime") else ""
+
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    buttons = [[InlineKeyboardButton(text=_("web_portal_open_button"), url=web_url)]]
+    if code:
+        text = _("web_portal_login_code_message", code=code, expires_at=expires_at_str)
+    else:
+        text = _("web_portal_login_code_message_no_code")
+
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        disable_web_page_preview=True,
+    )

@@ -16,6 +16,19 @@ services:
     restart: unless-stopped
     depends_on:
       - remnawave-tg-shop-db
+  remnawave-tg-shop-web:
+    image: ghcr.io/3252a8/remnawave-tg-shop-web:${IMAGE_TAG:-latest}
+    container_name: remnawave-tg-shop-web
+    hostname: remnawave-tg-shop-web
+    env_file:
+      - .env
+    networks:
+      - remnawave-network
+    restart: unless-stopped
+    depends_on:
+      - remnawave-tg-shop
+    ports:
+      - '127.0.0.1:3252:3000'
   remnawave-tg-shop-db:
     image: postgres:17
     container_name: remnawave-tg-shop-db

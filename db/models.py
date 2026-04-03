@@ -13,6 +13,13 @@ class User(Base):
     __tablename__ = "users"
 
     user_id = Column(BigInteger, primary_key=True, index=True)
+    email = Column(String, nullable=True, unique=True, index=True)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    telegram_user_id = Column(BigInteger, nullable=True, unique=True, index=True)
+    telegram_link_code_hash = Column(String, nullable=True, unique=True, index=True)
+    telegram_link_code_purpose = Column(String, nullable=True, index=True)
+    telegram_link_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+    telegram_linked_at = Column(DateTime(timezone=True), nullable=True)
     username = Column(String, nullable=True, index=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
@@ -265,3 +272,39 @@ class AdAttribution(Base):
 
     user = relationship("User")
     campaign = relationship("AdCampaign", back_populates="attributions")
+
+
+class WebAuthChallenge(Base):
+    __tablename__ = "web_auth_challenges"
+
+    challenge_id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, nullable=False, index=True)
+    purpose = Column(String, nullable=False, index=True)
+    code_hash = Column(String, nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=True, index=True)
+    request_ip = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_sent_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+
+
+class WebSession(Base):
+    __tablename__ = "web_sessions"
+
+    session_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    auth_method = Column(String, nullable=False, default="email")
+    request_ip = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
